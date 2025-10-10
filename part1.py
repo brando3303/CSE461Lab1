@@ -39,7 +39,7 @@ def main(args):
     for i in range(num_packets):
         payload = struct.pack("!I", i)
         for _ in range(total_bytes):
-            payload += b"x\00"
+            payload += b"\0"
         header = get_header(len(payload), secretA, 1)
         to_send = header + payload
 
@@ -52,10 +52,6 @@ def main(args):
                 break
             except socket.timeout as e:
                 continue
-
-        unpacked = struct.unpack("!I", data)
-        if (unpacked[0] != i):
-            print("uh oh")
     
     data = s.recv(20)
     data = data[12:]
