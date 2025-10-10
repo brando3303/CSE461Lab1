@@ -2,10 +2,13 @@
 import socket
 import sys
 import struct
+import time
 
 DEBUG = False
 
 def main(args, DEBUG=False):
+    start_time = time.perf_counter()
+
     if len(args) != 3:
         return
     
@@ -82,6 +85,9 @@ def main(args, DEBUG=False):
 
     print(f"Part B complete. SecretB: {secretB}")
     print()
+
+    end_time = time.perf_counter()
+    print(f"Time elapsed: {end_time - start_time:.4f}")
     
 def get_header(payload_len, secret, step):
     return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
