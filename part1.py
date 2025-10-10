@@ -27,7 +27,6 @@ def main(args):
     s.send(to_send)
 
     data = s.recv(28)
-    print(data[12:])
     unpacked = struct.unpack("!4I", data[12:])
     num_packets, length, udp_port, secretA = unpacked
     print(unpacked)
@@ -36,7 +35,7 @@ def main(args):
     s.connect((host, udp_port))
     s.settimeout(0.5)
     
-    total_bytes = length + (-1 * length % 4)
+    total_bytes = length + ((-1 * length) % 4)
     for i in range(num_packets):
         payload = struct.pack("!I", i)
         for _ in range(total_bytes):
@@ -48,7 +47,8 @@ def main(args):
         while True:
             try:
                 s.send(to_send)
-                data = s.recv(4)
+                data = s.recv(16)
+                data = data[12:]
                 break
             except socket.timeout as e:
                 continue
@@ -57,7 +57,8 @@ def main(args):
         if (unpacked[0] != i):
             print("uh oh")
     
-    data = s.recv(8)
+    data = s.recv(20)
+    data = data[12:]
     unpacked = struct.unpack("!II", data)
     print(unpacked)
     
