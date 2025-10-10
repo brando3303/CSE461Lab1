@@ -1,4 +1,4 @@
-# Lab 1 Part 1a
+# Lab 1 Part 1
 import socket
 import sys
 import struct
@@ -10,6 +10,7 @@ def main(args):
     host = args[1]
     port = args[2]
 
+    # Part a
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     addrinfo = socket.getaddrinfo(host, port, socket.AF_INET)
@@ -25,16 +26,21 @@ def main(args):
     to_send = header + payload
     s.send(to_send)
 
-    data = b""
-    while True:
-        chunk = s.recv(4096)
-        if not chunk:
-            break  # connection closed
-        data += chunk
-    
-    print(data.decode("utf-8"))
-    
+    data = s.recv(16)
+    unpacked = struct.unpack("!4I", data)
+    num, length, udp_port, secretA = unpacked
 
+    # Part b
+    addrinfo = socket.getaddrinfo(host, udp_port, socket.AF_INET)
+    for addr in addrinfo:
+        try:
+            s.connect(addr[4])
+            break
+        except socket.error as e:
+            continue
+    
+    
+    
 def get_header(payload_len, secret, step):
     return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
 
