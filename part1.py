@@ -4,7 +4,7 @@ import sys
 import struct
 import time
 
-DEBUG = True
+DEBUG = False
 
 def main(args, DEBUG=False):
     start_time = time.perf_counter()
@@ -27,6 +27,8 @@ def main(args, DEBUG=False):
             break
         except socket.error as e:
             print(f"Error: {e}")
+    
+    print(f"Connected")
     
     payload = bytes("hello world\0", "utf-8")
     header = get_header(len(payload), 0, 1)
@@ -52,6 +54,8 @@ def main(args, DEBUG=False):
 
     udp_sock.connect((host, udp_port))
     udp_sock.settimeout(0.5)
+
+    print(f"Connected")
     
     total_bytes = length + ((-1 * length) % 4)
     for i in range(num_packets):
@@ -92,29 +96,54 @@ def main(args, DEBUG=False):
 
     tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp_sock.connect((host, tcp_port))
-    tcp_sock.settimeout(0.5)
 
-    print(f"connected")
+    print(f"Connected")
 
     data = tcp_sock.recv(12 + 16)
     unpacked = struct.unpack("!IIIcccc", data[12:])
-    num2, len2, secretC, c = unpacked[:3]
+    num2, len2, secretC, c = unpacked[:4]
     if DEBUG:
         print(f"Received: {unpacked}")
-    print(f"Part C complete. SecretC: {secretC}")
 
-    # Part D
+    print(f"Part C complete. SecretC: {secretC}")
+    print()
+
+    # Part d
     print(f"Part D beginning...")
+
     # Word aligned length, does not contribute to length in header
-    total_bytes = length + ((-1 * len2) % 4)
     payload = b''
-    for _ in range(total_bytes):
-       payload += b"\0"
-    header = get_header(length + 4, secretA, 1)
+    for _ in range(len2):
+        payload += c
+    for _ in range ((-1 * len2) % 4):
+        payload += b"\0"
+    header = get_header(len2, secretC, 1)
     to_send = header + payload
 
+    for i in range(num2):
+        tcp_sock.send(to_send)
+        if DEBUG:
+            print(f"Sent packet {i}. Payload: {len(payload)}B, Header: {len(header)}B, Total: {len(to_send)}B")
+    
+    data = tcp_sock.recv(12 + 4)
+    unpacked = struct.unpack("!I", data[12:])
+    secretD = unpacked[0]
+    if DEBUG:
+        print(f"Received: {unpacked}")
+
+    print(f"Part D complete. SecretD: {secretD}")
+    print()
+
     end_time = time.perf_counter()
-    print(f"Time elapsed: {end_time - start_time:.4f}")
+    print("Part 1 Completed")
+    print("Summary:")
+    print(f"  SecretA: {secretA}")
+    print(f"  SecretB: {secretB}")
+    print(f"  SecretC: {secretC}")
+    print(f"  SecretD: {secretD}")
+    print()
+
+    print(f"Time elapsed: {end_time - start_time:.4f}s")
     
 def get_header(payload_len, secret, step):
     return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
