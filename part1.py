@@ -4,7 +4,7 @@ import sys
 import struct
 import time
 
-DEBUG = False
+DEBUG = True
 
 def main(args, DEBUG=False):
     start_time = time.perf_counter()
@@ -18,12 +18,12 @@ def main(args, DEBUG=False):
     # Part a
     print(f"Part A beginning...")
     print(f"Connecting to: {host}:{port}")
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     addrinfo = socket.getaddrinfo(host, port, socket.AF_INET)
     for addr in addrinfo:
         try:
-            s.connect(addr[4])
+            udp_sock.connect(addr[4])
             break
         except socket.error as e:
             print(f"Error: {e}")
@@ -31,11 +31,11 @@ def main(args, DEBUG=False):
     payload = bytes("hello world\0", "utf-8")
     header = get_header(len(payload), 0, 1)
     to_send = header + payload
-    s.send(to_send)
+    udp_sock.send(to_send)
     if DEBUG:
         print(f"Sent {len(to_send)} bytes. Payload: {len(payload)}B, Header: {len(header)}B")
 
-    data = s.recv(28)
+    data = udp_sock.recv(28)
     if DEBUG:
         print(f"Recieved {len(data)} bytes")
     unpacked = struct.unpack("!4I", data[12:])
@@ -50,8 +50,8 @@ def main(args, DEBUG=False):
     print(f"Part B beginning...")
     print(f"Connecting to {host}:{udp_port}")
 
-    s.connect((host, udp_port))
-    s.settimeout(0.5)
+    udp_sock.connect((host, udp_port))
+    udp_sock.settimeout(0.5)
     
     total_bytes = length + ((-1 * length) % 4)
     for i in range(num_packets):
@@ -64,10 +64,10 @@ def main(args, DEBUG=False):
         # Send until we get ack from server
         while True:
             try:
-                s.send(to_send)
+                udp_sock.send(to_send)
                 if DEBUG:
                     print(f"Sent packet {i}. Payload: {len(payload)}B, Header: {len(header)}B, Total: {len(to_send)}B")
-                data = s.recv(16)
+                data = udp_sock.recv(16)
                 if DEBUG:
                     print(f"Recieved {len(data)} bytes")
                 data = data[12:]
@@ -77,14 +77,41 @@ def main(args, DEBUG=False):
                     print(f"Timed out on packet {i}: {e}")
                 continue
     
-    s.settimeout(None)
-    data = s.recv(20)
+    udp_sock.settimeout(None)
+    data = udp_sock.recv(20)
     data = data[12:]
     unpacked = struct.unpack("!II", data)
     tcp_port, secretB = unpacked
 
     print(f"Part B complete. SecretB: {secretB}")
     print()
+
+    # Part c
+    print(f"Part C beginning...")
+    print(f"Connecting to {host}:{tcp_port}")
+
+    tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_sock.connect((host, tcp_port))
+    tcp_sock.settimeout(0.5)
+
+    print(f"connected")
+
+    data = tcp_sock.recv(12 + 16)
+    unpacked = struct.unpack("!IIIcccc", data[12:])
+    num2, len2, secretC, c = unpacked[:3]
+    if DEBUG:
+        print(f"Received: {unpacked}")
+    print(f"Part C complete. SecretC: {secretC}")
+
+    # Part D
+    print(f"Part D beginning...")
+    # Word aligned length, does not contribute to length in header
+    total_bytes = length + ((-1 * len2) % 4)
+    payload = b''
+    for _ in range(total_bytes):
+       payload += b"\0"
+    header = get_header(length + 4, secretA, 1)
+    to_send = header + payload
 
     end_time = time.perf_counter()
     print(f"Time elapsed: {end_time - start_time:.4f}")
