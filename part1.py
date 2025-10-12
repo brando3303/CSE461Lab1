@@ -135,7 +135,7 @@ def main(args, DEBUG=False):
     print()
 
     end_time = time.perf_counter()
-    print("Part 1 Completed")
+    print("Part 1 Complete")
     print("Summary:")
     print(f"  SecretA: {secretA}")
     print(f"  SecretB: {secretB}")
