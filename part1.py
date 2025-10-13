@@ -1,4 +1,5 @@
 # Lab 1 Part 1
+
 import socket
 import sys
 import struct
@@ -6,16 +7,35 @@ import time
 
 DEBUG = False
 
-def main(args, DEBUG=False):
-    start_time = time.perf_counter()
+def get_header(payload_len, secret, step):
+    """Packs the header into network order.
 
-    if len(args) != 3:
-        return
-    
-    host = args[1]
-    port = args[2]
+    Params:
+        - payload_len: length of payload being sent
+        - secret: secret to include in header
+        - step: step number
 
-    # Part a
+    Returns:
+        - header formatted in network order consisting of 4 bytes for
+          payload length, 4 bytes for the secret, and 2 bytes each for the step
+          and last 4 digits of Solden's student number.
+    """
+    return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
+
+def partA(host, port):
+    """Carry out the logic of part A by connecting to host on port and sending hello world.
+
+    Params:
+        - host: host to connect to
+        - port: udp port to connect to
+
+    Returns:
+        - udp_port: udp port to connect to
+        - udp_sock: udp socket to connect with
+        - num_packets: number of packets to send
+        - length: length of payload to send
+        - secretA: secret from part a
+    """
     print(f"Part A beginning...")
     print(f"Connecting to: {host}:{port}")
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,9 +47,9 @@ def main(args, DEBUG=False):
             break
         except socket.error as e:
             print(f"Error: {e}")
-    
+
     print(f"Connected")
-    
+
     payload = bytes("hello world\0", "utf-8")
     header = get_header(len(payload), 0, 1)
     to_send = header + payload
@@ -44,11 +64,27 @@ def main(args, DEBUG=False):
     num_packets, length, udp_port, secretA = unpacked
     if DEBUG:
         print(unpacked)
-    
+
     print(f"Part A complete. SecretA: {secretA}")
     print()
 
-    # Part b
+    return udp_port, udp_sock, num_packets, length, secretA
+
+def partB(host, udp_port, udp_sock, num_packets, length, secretA):
+    """Carry out the logic of part B by sending num_packets of zeroed payloads.
+
+    Params:
+        - host: host to connect to
+        - udp_port: udp port to connect to
+        - udp_sock: udp socket to connect with
+        - num_packets: number of packets to send
+        - length: length of payload to send
+        - secretA: secret from part a
+
+    Returns:
+        - tcp_port: port to connect to in part c
+        - secretB: secret from part b
+    """
     print(f"Part B beginning...")
     print(f"Connecting to {host}:{udp_port}")
 
@@ -56,7 +92,7 @@ def main(args, DEBUG=False):
     udp_sock.settimeout(0.5)
 
     print(f"Connected")
-    
+
     total_bytes = length + ((-1 * length) % 4)
     for i in range(num_packets):
         payload = struct.pack("!I", i)
@@ -80,17 +116,35 @@ def main(args, DEBUG=False):
                 if DEBUG:
                     print(f"Timed out on packet {i}: {e}")
                 continue
-    
+
     udp_sock.settimeout(None)
     data = udp_sock.recv(20)
     data = data[12:]
     unpacked = struct.unpack("!II", data)
     tcp_port, secretB = unpacked
 
+    print("Closing connection")
+    udp_sock.close()
+
     print(f"Part B complete. SecretB: {secretB}")
     print()
 
-    # Part c
+    return tcp_port, secretB
+
+def partC(host, tcp_port):
+    """Carry out the logic for part C by connecting to host on tcp_port and receiving information.
+
+    Params:
+        - host: host to connect to
+        - tcp_port: port to connect to
+
+    Returns:
+        - num2: number of packets to send for part d
+        - len2: length of payload to send for part d
+        - tcp_sock: socket to send data over for part d
+        - c: character that is sent num2 times in payload for part d
+        - secretC: secret from part c
+    """
     print(f"Part C beginning...")
     print(f"Connecting to {host}:{tcp_port}")
 
@@ -108,7 +162,21 @@ def main(args, DEBUG=False):
     print(f"Part C complete. SecretC: {secretC}")
     print()
 
-    # Part d
+    return tcp_sock, num2, len2, secretC, c
+
+def partD(num2, len2, tcp_sock, c, secretC):
+    """Carry out the logic for part D by sending num2 packets of len2 consisting of character c.
+
+    Params:
+        - num2: number of packets to send
+        - len2: length of payload to send
+        - tcp_sock: socket to send data over
+        - c: character that is sent num2 times in payload
+        - secretC: secret from part c
+
+    Returns:
+        - secretD: secret from part d
+    """
     print(f"Part D beginning...")
 
     # Word aligned length, does not contribute to length in header
@@ -124,15 +192,47 @@ def main(args, DEBUG=False):
         tcp_sock.send(to_send)
         if DEBUG:
             print(f"Sent packet {i}. Payload: {len(payload)}B, Header: {len(header)}B, Total: {len(to_send)}B")
-    
+
     data = tcp_sock.recv(12 + 4)
     unpacked = struct.unpack("!I", data[12:])
     secretD = unpacked[0]
     if DEBUG:
         print(f"Received: {unpacked}")
 
+    print("Closing socket")
+    tcp_sock.close()
+
     print(f"Part D complete. SecretD: {secretD}")
     print()
+
+    return secretD
+
+def main(args, DEBUG=False):
+    """Carry out each part sequentially and print a summary of total time and secrets.
+
+    Params:
+        - args: command-line args
+        - DEBUG: enable debug prints
+    """
+    start_time = time.perf_counter()
+
+    if len(args) != 3:
+        return
+
+    host = args[1]
+    port = args[2]
+
+    # Part a
+    udp_port, udp_sock, num_packets, length, secretA = partA(host, port)
+
+    # Part b
+    tcp_port, secretB = partB(host, udp_port, udp_sock, num_packets, length, secretA)
+
+    # Part c
+    tcp_sock, num2, len2, secretC, c = partC(host, tcp_port)
+
+    # Part d
+    secretD = partD(num2, len2, tcp_sock, c, secretC)
 
     end_time = time.perf_counter()
     print("Part 1 Complete")
@@ -144,9 +244,6 @@ def main(args, DEBUG=False):
     print()
 
     print(f"Time elapsed: {end_time - start_time:.4f}s")
-    
-def get_header(payload_len, secret, step):
-    return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
 
 if __name__ == "__main__":
     main(sys.argv[0:], DEBUG)
