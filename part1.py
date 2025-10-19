@@ -5,7 +5,7 @@ import sys
 import struct
 import time
 
-DEBUG = False
+DEBUG = True
 
 def get_header(payload_len, secret, step):
     """Packs the header into network order.
