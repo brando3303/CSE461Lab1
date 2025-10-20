@@ -1,14 +1,19 @@
 # Lab 1 Part 2
 
+# TODO: Need to change error handling: can't just close listener on part a
+
 import threading
 import socket
 import sys
 import struct
 
+# Constants
 DEBUG = True
+
 MAX_PORT = 65535
 MIN_PORT = 1024
 BANNED_PORT = 41201
+PARTA_HEADER = (12, 0, 1, )
 
 def main(args):
     if (len(args) != 3):
@@ -41,7 +46,7 @@ def server(host, port):
 
     # Need to change this to exit gracefully
 
-    # Accept new connections and spawn new threads for them
+    # Listen for clients and spawn new threads for them
     while True:
         data, addr = listener.recvfrom(1024)
         print(f"Connected by {addr}") 
@@ -51,7 +56,7 @@ def server(host, port):
         # later down the line.
         part_a(listener, data, addr)
         
-        thread = threading.Thread(target=server_loop, args=(data, addr), daemon=True)
+        thread = threading.Thread(target=server_loop, args=(addr,), daemon=True)
         thread.start()
         
 
@@ -68,6 +73,18 @@ def part_a(listener, data, addr):
 
     if len(data) != 24:
         listener.close()
+
+    # Check header against expected, close listner if it's wrong
+    header = get_header(data[:12])
+    if not check_header(header, PARTA_HEADER, True):
+        if DEBUG:
+            print("Header check failed")
+            print(header)
+            print(PARTA_HEADER)
+        listener.close()
+
+    payload = data[12:]
+    print(payload)
     
     return
 
@@ -82,6 +99,30 @@ def part_c():
 def part_d():
     # Part b
     return
+
+def check_header(header, expected, parta=False):
+    """
+    Checks header against an excpected header
+    """
+    check = 4
+    if parta:
+        check = 3
+
+    for i in range(check):
+        if header[i] != expected[i]:
+            return False
+
+    return True
+
+def get_header(data):
+    """
+    Gets and returns the header data in a tuple of
+    (payload_len, secret, step, sid)
+    """
+    header_data = data[:12]
+
+    # Handle header
+    return struct.unpack("!IIHH", header_data)
 
 if __name__ == "__main__":
     main(sys.argv[0:])
