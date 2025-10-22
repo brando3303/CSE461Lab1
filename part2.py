@@ -14,12 +14,21 @@ DEBUG = True
 MAX_PORT = 65535
 MIN_PORT = 1024
 BANNED_PORT = 41201
-PARTA_HEADER = (12, 0, 1, )
+HEADER_LENGTH = 12
 PARTA_PAYLOAD = b"hello world\0"
 
 # Global list of active sockets for cleanup
 sockets = []
 sockets_lock = threading.Lock()
+
+def cleanup_socket(sock):
+    """ 
+    Closes socket and removes it from global list. Still closes socket even if not in list.
+    """
+    with sockets_lock:
+        if sock in sockets:
+            sockets.remove(sock)
+        sock.close()
 
 def main(args):
     if (len(args) != 3):
@@ -96,6 +105,7 @@ def server_loop(listener, addr, data):
     num2, len2, c, secretC, tcp_sock = part_c(tcp_port, secretB) 
     part_d(num2, len2, c, secretC, tcp_sock, sid)
     print(f"Finished connection from {addr}")
+    print(f"sockets open: {len(sockets)}")
     return
 
 def part_a(listener, data, addr):
@@ -141,8 +151,8 @@ def part_a(listener, data, addr):
             return
 
         #generate response
-        num = random.randint(1, 100)
-        len1 = random.randint(1, 64)
+        num = random.randint(1, 20)
+        len1 = random.randint(1, 48)
 
         # TODO
         udp_port = random.randint(MIN_PORT, MAX_PORT)  # check that this is a valid port to bind to
@@ -200,22 +210,15 @@ def part_b(num, udp_port, secretA, len1, sid):
             if not packet:
                 if DEBUG:
                     print("Packet validation failed")
-
                 # Remove socket from global list
-                with sockets_lock:
-                    sockets.remove(udp_sock)
-                
-                udp_sock.close()
-
+                cleanup_socket(udp_sock)
                 sys.exit()
             #check packet_id
             packet_id = struct.unpack("!I", packet[:4])[0]
             if packet_id > i:
                 if DEBUG:
                     print(f"Packet ID mismatch: expected {i}, got {packet_id}")
-                with sockets_lock:
-                    sockets.remove(udp_sock)
-                udp_sock.close()
+                cleanup_socket(udp_sock)
                 sys.exit()
             elif packet_id < i:
                 if DEBUG:
@@ -233,15 +236,13 @@ def part_b(num, udp_port, secretA, len1, sid):
         payload = struct.pack("!II", tcp_port, secretB)
         header = generate_header(8, secretA, 2)
         udp_sock.sendto(header + payload, addr)
-        with sockets_lock:
-            sockets.remove(udp_sock)
-        udp_sock.close()
+        cleanup_socket(udp_sock)
         print("Closing connection")
         return tcp_port, secretB
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
-        
+        cleanup_socket(udp_sock)
         sys.exit()
 
 def part_c(tcp_port, secretB):
@@ -289,24 +290,20 @@ def part_c(tcp_port, secretB):
         header = generate_header(13, secretB, 2)
         conn.send(header + payload)
 
-        with sockets_lock:
-            sockets.remove(tcp_sock)
-
-        tcp_sock.close()
+        cleanup_socket(tcp_sock)
 
         return num2, len2, c, secretC, conn
     except socket.timeout as e:
         print(f"Socket timed out: {e}")
-        with sockets_lock:
-            sockets.remove(tcp_sock)
-            sockets.remove(conn)
 
-        tcp_sock.close()
-        conn.close()
+        cleanup_socket(tcp_sock)
+        cleanup_socket(conn)
         sys.exit()
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
+        cleanup_socket(tcp_sock)
+        cleanup_socket(conn)
         
         sys.exit()
 
@@ -331,30 +328,26 @@ def part_d(num2, len2, c, secretC, sock, sid):
             if not payload:
                 if DEBUG:
                     print("Packet validation failed")
-                with sockets_lock:
-                    print(sockets)
-                    sockets.remove(sock)
-                sock.close()
+                cleanup_socket(sock)
                 return
             expected_payload = c.encode() * len2
             if payload != expected_payload:
                 if DEBUG:
                     print("Payload mismatch")
-                with sockets_lock:
-                    sockets.remove(sock)
-                sock.close()
+                cleanup_socket(sock)
                 return
         header = generate_header(0, secretC, 2)
         payload = struct.pack("!I", random.randint(1, 100))
         sock.send(header + payload)
         print("Closing connection")
 
-        sock.close()
+        cleanup_socket(sock)
         return
     
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
+        cleanup_socket(sock)
         
         sys.exit()
 
@@ -401,13 +394,13 @@ def validate_packet(data, expected_payload_len, expected_secret, expected_step, 
     payload_len, secret, step, sid = header
 
     # 1: Check header length
-    if len(data) < 12:
+    if len(data) < HEADER_LENGTH:
         if DEBUG:
             print("Invalid packet: Header too short")
         return None
 
     # 2: Check that header length matches payload length ( within 4 padded bytes ) ( this is wrong )
-    actual_payload_len = len(data) - 12
+    actual_payload_len = len(data) - HEADER_LENGTH
     aligned_bytes = expected_payload_len + ((-1 * expected_payload_len) % 4)
     if actual_payload_len != aligned_bytes:
         if DEBUG:
@@ -430,7 +423,7 @@ def validate_packet(data, expected_payload_len, expected_secret, expected_step, 
             print("Invalid packet: SID mismatch")
         return None
 
-    return data[12:12 + payload_len], sid
+    return data[HEADER_LENGTH:HEADER_LENGTH + payload_len], sid
 
 
 if __name__ == "__main__":
