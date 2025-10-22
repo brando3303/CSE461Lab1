@@ -84,12 +84,10 @@ def part_a(listener, data, addr):
         # listener.close() dont need to close the udp socket because the server is listening
 
     # Check header against expected, close listner if it's wrong
-    header = get_header(data[:12])
-    if not check_header(header, PARTA_HEADER, True):
+    payload = validate_packet(data, 12, 0, 1, None)
+    if not payload:
         if DEBUG:
             print("Header check failed")
-            print(header)
-            print(PARTA_HEADER)
         # listener.close()
         return
 
@@ -123,7 +121,14 @@ def part_b( num, udp_port, secretA, len1):
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.settimeout(1)
     udp_sock.bind(('', udp_port)) # need to error handle this
+    # for i in range(num):
+    #     data, addr = udp_sock.recvfrom(1024)  # wait for packet
+    #     req_header = get_header(data)
+    #     expected_header = generate_header(len1 + 4, secretA, 1, )
 
+
+
+        
     return
 
 def part_c():
@@ -172,6 +177,54 @@ def generate_header(payload_len, secret, step):
           and last 4 digits of Solden's student number.
     """
     return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
+
+def validate_packet(data, expected_payload_len, expected_secret, expected_step, expected_sid):
+    """
+    Validates a packet's header and payload against expected values.
+    data: The full packet data
+    expected_payload_len: Expected length of the payload
+    expected_secret: Expected secret value, optional
+    expected_step: Expected step value, optional
+    expected_sid: Expected student ID value, optional
+    1: Check header length
+    2: Check that header length matches payload length ( within 4 padded bytes )
+    3: optionally check secret, step, sid
+    Returns payload if valid, None otherwise.
+    """
+    header = get_header(data)
+    payload_len, secret, step, sid = header
+
+    # 1: Check header length
+    if len(data) < 12:
+        if DEBUG:
+            print("Invalid packet: Header too short")
+        return None
+
+    # 2: Check that header length matches payload length ( within 4 padded bytes ) ( this is wrong )
+    actual_payload_len = len(data) - 12
+    if actual_payload_len != expected_payload_len:
+        if DEBUG:
+            print("Invalid packet: Payload length mismatch")
+        return None
+
+    # 3: optionally check secret, step, sid
+    if expected_secret is not None and secret != expected_secret:
+        if DEBUG:
+            print("Invalid packet: Secret mismatch")
+        return None
+
+    if expected_step is not None and step != expected_step:
+        if DEBUG:
+            print("Invalid packet: Step mismatch")
+        return None
+
+    if expected_sid is not None and sid != expected_sid:
+        if DEBUG:
+            print("Invalid packet: SID mismatch")
+        return None
+
+    return data[12:]
+
 
 if __name__ == "__main__":
     main(sys.argv[0:])
