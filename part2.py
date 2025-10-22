@@ -17,6 +17,9 @@ BANNED_PORT = 41201
 PARTA_HEADER = (12, 0, 1, )
 PARTA_PAYLOAD = b"hello world\0"
 
+# Event to handle closing sockets on each thread when server is stopped
+SHUTDOWN_EVENT = threading.Event()
+
 def main(args):
     if (len(args) != 3):
         print(f"Usage: {args[0]} host port")
@@ -49,22 +52,26 @@ def server(host, port):
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(('', port))
 
-    # Need to change this to exit gracefully
+    # Listen for keyboard interrups to exit
+    try:
+        # Listen for clients and spawn new threads for them
+        while True:
+            data, addr = listener.recvfrom(1024)
+            print(f"Connected by {addr}") 
 
-    # Listen for clients and spawn new threads for them
-    while True:
-        data, addr = listener.recvfrom(1024)
-        print(f"Connected by {addr}") 
-
-        # Run part a first since it is a UDP connection accessed by all clients at the
-        # start. Spawn a thread to handle individual clients on separate servers
-        # later down the line.
+            # Run part a first since it is a UDP connection accessed by all clients at the
+            # start. Spawn a thread to handle individual clients on separate servers
+            # later down the line.
 
 
-        if addr not in processed_clients:
-            processed_clients.append(addr)
-            thread = threading.Thread(target=server_loop, args=(listener, addr, data), daemon=True)
-            thread.start()
+            if addr not in processed_clients:
+                processed_clients.append(addr)
+                thread = threading.Thread(target=server_loop, args=(listener, addr, data), daemon=True)
+                thread.start()
+    except KeyboardInterrupt:
+        SHUTDOWN_EVENT.set()
+        print("Server terminated by user")
+        sys.exit()
         
 
 def server_loop(listener, addr, data):
