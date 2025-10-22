@@ -6,6 +6,7 @@ import threading
 import socket
 import sys
 import struct
+import random
 
 # Constants
 DEBUG = True
@@ -14,6 +15,7 @@ MAX_PORT = 65535
 MIN_PORT = 1024
 BANNED_PORT = 41201
 PARTA_HEADER = (12, 0, 1, )
+PARTA_PAYLOAD = b"hello world\0"
 
 def main(args):
     if (len(args) != 3):
@@ -39,6 +41,9 @@ def server(host, port):
     new threads for each new client to handle the server logic. 
     """
 
+    # will need to handle clean up
+    processed_clients = []
+
     # Start with a UDP port that the clients will connect to
     listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -54,15 +59,18 @@ def server(host, port):
         # Run part a first since it is a UDP connection accessed by all clients at the
         # start. Spawn a thread to handle individual clients on separate servers
         # later down the line.
-        part_a(listener, data, addr)
-        
-        thread = threading.Thread(target=server_loop, args=(addr,), daemon=True)
-        thread.start()
+
+
+        if addr not in processed_clients:
+            processed_clients.append(addr)
+            thread = threading.Thread(target=server_loop, args=(listener, addr, data), daemon=True)
+            thread.start()
         
 
-def server_loop(addr):
+def server_loop(listener, addr, data):
     # Run the logic of the server loop
-    
+    num, udp_port, secretA, len1 = part_a(listener, data, addr)
+    part_b(num, udp_port, secretA, len1)
     print(f"Finished connection from {addr}")
     return
 
@@ -72,7 +80,8 @@ def part_a(listener, data, addr):
         print(f"Recieved {data} from {addr}")
 
     if len(data) != 24:
-        listener.close()
+        return
+        # listener.close() dont need to close the udp socket because the server is listening
 
     # Check header against expected, close listner if it's wrong
     header = get_header(data[:12])
@@ -81,23 +90,48 @@ def part_a(listener, data, addr):
             print("Header check failed")
             print(header)
             print(PARTA_HEADER)
-        listener.close()
+        # listener.close()
+        return
 
     payload = data[12:]
     print(payload)
-    
-    return
 
-def part_b():
+    if payload != PARTA_PAYLOAD:
+        if DEBUG:
+            print("Payload check failed")
+        # listener.close()
+        return
+
+    #generate response
+    num = random.randint(1, 1000000)
+    len1 =   random.randint(1, 128)
+    udp_port = random.randint(MIN_PORT, MAX_PORT)  # check that this is a valid port to bind to
+    secretA = random.randint(1, 4096)
+
+    response_header = generate_header(16, 0, 2)
+    response_payload = struct.pack("!IIII", num, len1, udp_port, secretA)
+    print(response_payload)
+    to_send = response_header + response_payload
+    listener.sendto(to_send, addr)
+
+    return (num, udp_port, secretA, len1)
+
+def part_b( num, udp_port, secretA, len1):
     # Part b
+    print(f"Part B beginning...")
+    print(f"Connecting to {addr[0]}:{udp_port}")
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.settimeout(1)
+    udp_sock.bind(('', udp_port)) # need to error handle this
+
     return
 
 def part_c():
-    # Part b
+    # Part c
     return
 
 def part_d():
-    # Part b
+    # Part d
     return
 
 def check_header(header, expected, parta=False):
@@ -123,6 +157,21 @@ def get_header(data):
 
     # Handle header
     return struct.unpack("!IIHH", header_data)
+
+def generate_header(payload_len, secret, step):
+    """Packs the header into network order.
+
+    Params:
+        - payload_len: length of payload being sent
+        - secret: secret to include in header
+        - step: step number
+
+    Returns:
+        - header formatted in network order consisting of 4 bytes for
+          payload length, 4 bytes for the secret, and 2 bytes each for the step
+          and last 4 digits of Solden's student number.
+    """
+    return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
 
 if __name__ == "__main__":
     main(sys.argv[0:])
