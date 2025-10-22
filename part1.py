@@ -1,11 +1,17 @@
 # Lab 1 Part 1
+# Group Members:
+# Brandon Bailey (@bbailey9)
+# Solden Stoll (@solden)
 
 import socket
 import sys
 import struct
 import time
 
-DEBUG = True
+# Constants
+DEBUG = False
+
+MAX_TIMEOUTS = 10
 
 def get_header(payload_len, secret, step):
     """Packs the header into network order.
@@ -39,6 +45,7 @@ def partA(host, port):
     print(f"Part A beginning...")
     print(f"Connecting to: {host}:{port}")
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.settimeout(3)
 
     addrinfo = socket.getaddrinfo(host, port, socket.AF_INET)
     for addr in addrinfo:
@@ -57,7 +64,12 @@ def partA(host, port):
     if DEBUG:
         print(f"Sent {len(to_send)} bytes. Payload: {len(payload)}B, Header: {len(header)}B")
 
-    data = udp_sock.recv(28)
+    try:
+        data = udp_sock.recv(28)
+    except socket.timeout as e:
+        print(f"Server did not respond: {e}")
+        sys.exit(1)
+
     if DEBUG:
         print(f"Recieved {len(data)} bytes")
     unpacked = struct.unpack("!4I", data[12:])
@@ -102,7 +114,13 @@ def partB(host, udp_port, udp_sock, num_packets, length, secretA):
         to_send = header + payload
 
         # Send until we get ack from server
+        timeout_count = 0
         while True:
+            # If we timeout too many times, exit
+            if timeout_count > MAX_TIMEOUTS:
+                sys.exit(1)
+                udp_sock.close()
+            
             try:
                 udp_sock.send(to_send)
                 if DEBUG:
@@ -113,8 +131,9 @@ def partB(host, udp_port, udp_sock, num_packets, length, secretA):
                 data = data[12:]
                 break
             except socket.timeout as e:
+                timeout_count += 1
                 if DEBUG:
-                    print(f"Timed out on packet {i}: {e}")
+                    print(f"Timed out on packet {i} after {timeout_count} attempts: {e}")
                 continue
 
     udp_sock.settimeout(None)
@@ -149,11 +168,25 @@ def partC(host, tcp_port):
     print(f"Connecting to {host}:{tcp_port}")
 
     tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp_sock.connect((host, tcp_port))
+
+    # Try to connect:
+    try:
+        tcp_sock.connect((host, tcp_port))
+    except socket.error as e:
+        print(f"Could not connect to {host}:{tcp_port}: {e}")
+        tcp_sock.close()
+        sys.exit(1)
 
     print(f"Connected")
 
-    data = tcp_sock.recv(12 + 16)
+    # Try to recieve
+    try:
+        data = tcp_sock.recv(12 + 16)
+    except socket.error as e:
+        print(f"Error recieving from port: {e}")
+        tcp_sock.close()
+        sys.exit(1)
+
     unpacked = struct.unpack("!IIIcccc", data[12:])
     num2, len2, secretC, c = unpacked[:4]
     if DEBUG:
@@ -193,7 +226,14 @@ def partD(num2, len2, tcp_sock, c, secretC):
         if DEBUG:
             print(f"Sent packet {i}. Payload: {len(payload)}B, Header: {len(header)}B, Total: {len(to_send)}B")
 
-    data = tcp_sock.recv(12 + 4)
+    # Try to recieve
+    try:
+        data = tcp_sock.recv(12 + 4)
+    except socket.error as e:
+        print(f"Error recieving from port: {e}")
+        tcp_sock.close()
+        sys.exit(1)
+
     unpacked = struct.unpack("!I", data[12:])
     secretD = unpacked[0]
     if DEBUG:
@@ -207,7 +247,7 @@ def partD(num2, len2, tcp_sock, c, secretC):
 
     return secretD
 
-def main(args, DEBUG=False):
+def main(args):
     """Carry out each part sequentially and print a summary of total time and secrets.
 
     Params:
@@ -246,4 +286,4 @@ def main(args, DEBUG=False):
     print(f"Time elapsed: {end_time - start_time:.4f}s")
 
 if __name__ == "__main__":
-    main(sys.argv[0:], DEBUG)
+    main(sys.argv[0:])
