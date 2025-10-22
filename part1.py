@@ -9,7 +9,7 @@ import struct
 import time
 
 # Constants
-DEBUG = False
+DEBUG = True
 
 MAX_TIMEOUTS = 10
 

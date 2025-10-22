@@ -108,7 +108,7 @@ def part_a(listener, data, addr):
         return
 
     #generate response
-    num = random.randint(1, 1000000)
+    num = random.randint(1, 100)
     len1 =   random.randint(1, 128)
     udp_port = random.randint(MIN_PORT, MAX_PORT)  # check that this is a valid port to bind to
     secretA = random.randint(1, 4096)
@@ -124,18 +124,36 @@ def part_a(listener, data, addr):
 def part_b( num, udp_port, secretA, len1):
     # Part b
     print(f"Part B beginning...")
-    print(f"Connecting to {addr[0]}:{udp_port}")
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.settimeout(1)
     udp_sock.bind(('', udp_port)) # need to error handle this
-    # for i in range(num):
-    #     data, addr = udp_sock.recvfrom(1024)  # wait for packet
-    #     req_header = get_header(data)
-    #     expected_header = generate_header(len1 + 4, secretA, 1, )
+    for i in range(num):
+        data, addr = udp_sock.recvfrom(1024)  # wait for packet
+        packet = validate_packet(data, len1 + 4, secretA, 1, None)
+        if not packet:
+            if DEBUG:
+                print("Packet validation failed")
+            udp_sock.close()
+            return
+        #check packet_id
+        packet_id = struct.unpack("!I", packet[:4])[0]
+        if packet_id != i:
+            if DEBUG:
+                print(f"Packet ID mismatch: expected {i}, got {packet_id}")
+            udp_sock.close()
+            return
+        # Send ack
+        ack_header = generate_header(4, secretA, 2)
+        ack_payload = struct.pack("!I", i)
+        udp_sock.sendto(ack_header + ack_payload, addr)
 
-
-
-        
+    tcp_port = random.randint(MIN_PORT, MAX_PORT)
+    secretB = random.randint(1, 4096)
+    payload = struct.pack("!II", tcp_port, secretB)
+    header = generate_header(8, secretA, 2)
+    udp_sock.sendto(header + payload, addr)
+    udp_sock.close()
+    print("Closing connection")
     return
 
 def part_c():
@@ -209,7 +227,8 @@ def validate_packet(data, expected_payload_len, expected_secret, expected_step, 
 
     # 2: Check that header length matches payload length ( within 4 padded bytes ) ( this is wrong )
     actual_payload_len = len(data) - 12
-    if actual_payload_len != expected_payload_len:
+    aligned_bytes = expected_payload_len + ((-1 * expected_payload_len) % 4)
+    if actual_payload_len != aligned_bytes:
         if DEBUG:
             print("Invalid packet: Payload length mismatch")
         return None
