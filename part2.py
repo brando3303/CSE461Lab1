@@ -120,7 +120,7 @@ def part_a(listener, data, addr):
 
         #generate response
         num = random.randint(1, 100)
-        len1 = random.randint(1, 128)
+        len1 = random.randint(1, 64)
 
         # TODO
         udp_port = random.randint(MIN_PORT, MAX_PORT)  # check that this is a valid port to bind to
@@ -149,9 +149,16 @@ def part_b(num, udp_port, secretA, len1):
             sockets.append(udp_sock)
 
         udp_sock.settimeout(1)
+
         udp_sock.bind(('', udp_port)) # need to error handle this
-        for i in range(num):
+        i = 0
+        while i < num:
             data, addr = udp_sock.recvfrom(1024)  # wait for packet
+
+            if random.random() < 0.2:
+                if DEBUG:
+                    print(f"Dropping packet {i} to simulate loss")
+                continue
             packet = validate_packet(data, len1 + 4, secretA, 1, None)
             if not packet:
                 if DEBUG:
@@ -166,17 +173,23 @@ def part_b(num, udp_port, secretA, len1):
                 sys.exit()
             #check packet_id
             packet_id = struct.unpack("!I", packet[:4])[0]
-            if packet_id != i:
+            if packet_id > i:
                 if DEBUG:
                     print(f"Packet ID mismatch: expected {i}, got {packet_id}")
                 with sockets_lock:
                     sockets.remove(udp_sock)
                 udp_sock.close()
                 sys.exit()
+            elif packet_id < i:
+                if DEBUG:
+                    print(f"Duplicate packet {packet_id} received, ignoring.")
+                continue
             # Send ack
+            print(f"Sending ack for packet {i}")
             ack_header = generate_header(4, secretA, 2)
             ack_payload = struct.pack("!I", i)
             udp_sock.sendto(ack_header + ack_payload, addr)
+            i += 1
 
         tcp_port = random.randint(MIN_PORT, MAX_PORT)
         secretB = random.randint(1, 4096)
@@ -205,8 +218,11 @@ def part_c(tcp_port, secretB):
         # Bind and listen for client
         tcp_sock.bind(('', tcp_port))
         tcp_sock.listen(1)
-        conn, addr = tcp_sock.accept()
+        conn, addr = tcp_sock.accept() # we may need to add and close conn bc its also a socket
         tcp_sock.settimeout(None)
+
+        with sockets_lock:
+            sockets.append(conn)
 
         if DEBUG:
             print(f"Connected to {addr}")
@@ -222,7 +238,7 @@ def part_c(tcp_port, secretB):
         header = generate_header(13, secretB, 2)
         conn.send(header + payload)
         
-        return num2, len2, c, secretC, tcp_sock
+        return num2, len2, c, secretC, conn
     except socket.timeout as e:
         print(f"Socket timed out: {e}")
         with sockets_lock:
@@ -240,27 +256,29 @@ def part_d(num2, len2, c, secretC, sock):
     # Part d
     try:
         print("Part D beginning...")
-        data = sock.recv(1024)
-        payload = validate_packet(data, len2, secretC, 4, None)
-        if not payload:
-            if DEBUG:
-                print("Packet validation failed")
-            with sockets_lock:
-                sockets.remove(sock)
-            sock.close()
-        expected_payload = c.encode() * num2
-        if payload != expected_payload:
-            if DEBUG:
-                print("Payload mismatch")
-            with sockets_lock:
-                sockets.remove(sock)
-            sock.close()
-        header = generate_header(0, secretC, 5)
+        for i in range(num2):
+            data = sock.recv(12 + len2 + ((-1 * len2) % 4))
+            payload = validate_packet(data, len2, secretC, 1, None)
+            if not payload:
+                if DEBUG:
+                    print("Packet validation failed")
+                with sockets_lock:
+                    print(sockets)
+                    sockets.remove(sock)
+                sock.close()
+                return
+            expected_payload = c.encode() * len2
+            if payload != expected_payload:
+                if DEBUG:
+                    print("Payload mismatch")
+                with sockets_lock:
+                    sockets.remove(sock)
+                sock.close()
+                return
+        header = generate_header(0, secretC, 2)
         payload = struct.pack("!I", random.randint(1, 100))
         sock.send(header + payload)
         print("Closing connection")
-        with sockets_lock:
-            sockets.remove(sock)
 
         sock.close()
         return
@@ -356,7 +374,7 @@ def validate_packet(data, expected_payload_len, expected_secret, expected_step, 
             print("Invalid packet: SID mismatch")
         return None
 
-    return data[12:]
+    return data[12:12 + payload_len]
 
 
 if __name__ == "__main__":
