@@ -160,8 +160,23 @@ def part_c():
     # Part c
     return
 
-def part_d():
+def part_d(num2, len2, c, secretC, sock):
     # Part d
+    data = sock.recv(1024)
+    payload = validate_packet(data, len2, secretC, 4, None)
+    if not payload:
+        if DEBUG:
+            print("Packet validation failed")
+        sock.close()
+    expected_payload = c.encode() * num2
+    if payload != expected_payload:
+        if DEBUG:
+            print("Payload mismatch")
+        sock.close()
+    header = generate_header(0, secretC, 5)
+    payload = struct.pack("!I", random.randint(1, 100))
+    sock.send(header + payload)
+    print("Closing connection")
     return
 
 def check_header(header, expected, parta=False):
