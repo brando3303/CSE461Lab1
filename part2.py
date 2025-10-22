@@ -83,16 +83,38 @@ def server(host, port):
         
 
 def server_loop(listener, addr, data):
-    # Run the logic of the server loop
-    num, udp_port, secretA, len1 = part_a(listener, data, addr)
-    tcp_port, secretB = part_b(num, udp_port, secretA, len1)
+    """Runs the main server loop consisting of parts a-d. This is the work
+    done by each thread.
+
+    Params:
+        - listener, initial udp port to send response on
+        - addr: client address to send to
+        - data: initial data from client
+    """
+    num, udp_port, secretA, len1, sid = part_a(listener, data, addr)
+    tcp_port, secretB = part_b(num, udp_port, secretA, len1, sid)
     num2, len2, c, secretC, tcp_sock = part_c(tcp_port, secretB) 
-    part_d(num2, len2, c, secretC, tcp_sock)
+    part_d(num2, len2, c, secretC, tcp_sock, sid)
     print(f"Finished connection from {addr}")
     return
 
 def part_a(listener, data, addr):
-    # Part a
+    """Carry out the logic of part A. Once data is recived from client,
+    sends a response to the client containing information for part B.
+    If socket is closed by server, exits thread gracefully.
+
+    Params:
+        - listener: udp socket to listen and send response on
+        - data: data recieved from client when contact is made
+        - addr: client address
+
+    Returns:
+        - num_packets: number of packets to send
+        - udp_port: udp port to connect to
+        - secretA: secret from part a
+        - length: length of payload to send
+        - sid: client last 3 digits of student number
+    """
     try:
         if DEBUG:
             print(f"Recieved {data} from {addr}")
@@ -102,7 +124,7 @@ def part_a(listener, data, addr):
             # listener.close() dont need to close the udp socket because the server is listening
 
         # Check header against expected, close listner if it's wrong
-        payload = validate_packet(data, 12, 0, 1, None)
+        payload, sid = validate_packet(data, 12, 0, 1, None)
         if not payload:
             if DEBUG:
                 print("Header check failed")
@@ -132,14 +154,29 @@ def part_a(listener, data, addr):
         to_send = response_header + response_payload
         listener.sendto(to_send, addr)
 
-        return (num, udp_port, secretA, len1)
+        return (num, udp_port, secretA, len1, sid)
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
-            sys.exit()
+        
+        sys.exit()
 
-def part_b(num, udp_port, secretA, len1):
-    # Part b
+def part_b(num, udp_port, secretA, len1, sid):
+    """Carry out the logic of part B by sending acks for num_packets 
+    packets of zeroed payloads sent by the client. If socket is closed by server, 
+    exits thread gracefully.
+
+    Params:
+        - num: number of packets to recieve
+        - udp_port: udp port to connect to
+        - secretA: secret from part a
+        - len1: length of payload to recieve
+        - sid: client last 3 digits of student number from part a
+
+    Returns:
+        - tcp_port: port to create to in part c
+        - secretB: secret from part b
+    """
     try:
         print(f"Part B beginning...")
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -159,7 +196,7 @@ def part_b(num, udp_port, secretA, len1):
                 if DEBUG:
                     print(f"Dropping packet {i} to simulate loss")
                 continue
-            packet = validate_packet(data, len1 + 4, secretA, 1, None)
+            packet, _ = validate_packet(data, len1 + 4, secretA, 1, sid)
             if not packet:
                 if DEBUG:
                     print("Packet validation failed")
@@ -204,10 +241,24 @@ def part_b(num, udp_port, secretA, len1):
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
-            sys.exit()
+        
+        sys.exit()
 
 def part_c(tcp_port, secretB):
-    # Part c
+    """Carry out the logic for part C by creating a host on tcp_port and sending
+    information once the client connects. If socket is closed by server, exits thread gracefully.
+
+    Params:
+        - tcp_port: port to connect to
+        - secretB: secret from part b
+
+    Returns:
+        - num2: number of packets to send for part d
+        - len2: length of payload to send for part d
+        - c: character that is sent num2 times in payload for part d
+        - secretC: secret from part c
+        - conn: socket to send data over for part d
+    """
     try:
         print("Part C beginning...")
         tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -237,28 +288,46 @@ def part_c(tcp_port, secretB):
         payload += bytes(str(c), 'utf-8') + b"\0\0\0"
         header = generate_header(13, secretB, 2)
         conn.send(header + payload)
-        
+
+        with sockets_lock:
+            sockets.remove(tcp_sock)
+
+        tcp_sock.close()
+
         return num2, len2, c, secretC, conn
     except socket.timeout as e:
         print(f"Socket timed out: {e}")
         with sockets_lock:
             sockets.remove(tcp_sock)
+            sockets.remove(conn)
 
         tcp_sock.close()
+        conn.close()
         sys.exit()
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
-            sys.exit()
+        
+        sys.exit()
 
 
-def part_d(num2, len2, c, secretC, sock):
-    # Part d
+def part_d(num2, len2, c, secretC, sock, sid):
+    """Carry out the logic for part D by recieving num2 packets of len2 consisting of character c.
+    If socket is closed by server, exits thread gracefully.
+
+    Params:
+        - num2: number of packets to send
+        - len2: length of payload to send
+        - c: character that is sent num2 times in payload
+        - secretC: secret from part c
+        - tcp_sock: socket to send data over
+        - sid: client last 3 digits of student number from part a
+    """
     try:
         print("Part D beginning...")
         for i in range(num2):
             data = sock.recv(12 + len2 + ((-1 * len2) % 4))
-            payload = validate_packet(data, len2, secretC, 1, None)
+            payload, _ = validate_packet(data, len2, secretC, 1, sid)
             if not payload:
                 if DEBUG:
                     print("Packet validation failed")
@@ -286,22 +355,8 @@ def part_d(num2, len2, c, secretC, sock):
     except OSError as e:
         if DEBUG:
             print(f"OSError: {e}. Thread shutting down.")
-            sys.exit()
-
-
-def check_header(header, expected, parta=False):
-    """
-    Checks header against an excpected header
-    """
-    check = 4
-    if parta:
-        check = 3
-
-    for i in range(check):
-        if header[i] != expected[i]:
-            return False
-
-    return True
+        
+        sys.exit()
 
 def get_header(data):
     """
@@ -313,20 +368,21 @@ def get_header(data):
     # Handle header
     return struct.unpack("!IIHH", header_data)
 
-def generate_header(payload_len, secret, step):
+def generate_header(payload_len, secret, step, sid=758):
     """Packs the header into network order.
 
     Params:
         - payload_len: length of payload being sent
         - secret: secret to include in header
         - step: step number
+        - sid: student number to use
 
     Returns:
         - header formatted in network order consisting of 4 bytes for
           payload length, 4 bytes for the secret, and 2 bytes each for the step
           and last 4 digits of Solden's student number.
     """
-    return struct.pack('!IIHH', int(payload_len), int(secret), int(step), 758)
+    return struct.pack('!IIHH', int(payload_len), int(secret), int(step), sid)
 
 def validate_packet(data, expected_payload_len, expected_secret, expected_step, expected_sid):
     """
@@ -374,7 +430,7 @@ def validate_packet(data, expected_payload_len, expected_secret, expected_step, 
             print("Invalid packet: SID mismatch")
         return None
 
-    return data[12:12 + payload_len]
+    return data[12:12 + payload_len], sid
 
 
 if __name__ == "__main__":
