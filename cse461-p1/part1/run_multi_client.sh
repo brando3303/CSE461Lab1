@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Usage: ./run_server.sh <host> <port>
+# Usage: ./run_client.sh <host> <port>
 
 HOST=$1
 PORT=$2
@@ -13,4 +13,10 @@ if [ -z "$HOST" ] || [ -z "$PORT" ]; then
   exit 1
 fi
 
-python "$dname/part2.py" "$HOST" "$PORT"
+for i in {1..4}; do
+  echo "Starting process $i..."
+  python "$dname/part1.py" "$HOST" "$PORT" &
+done
+
+wait
+
