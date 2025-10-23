@@ -195,7 +195,7 @@ def part_b(num, udp_port, secretA, len1, sid):
         with sockets_lock:
             sockets.append(udp_sock)
 
-        udp_sock.settimeout(1)
+        # udp_sock.settimeout(1)
 
         udp_sock.bind(('', udp_port)) # need to error handle this
         i = 0
