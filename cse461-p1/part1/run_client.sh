@@ -13,4 +13,4 @@ if [ -z "$HOST" ] || [ -z "$PORT" ]; then
   exit 1
 fi
 
-python "$dname/part1.py" "$HOST" "$PORT"
+python3 "$dname/part1.py" "$HOST" "$PORT"
