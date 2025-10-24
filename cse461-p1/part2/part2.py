@@ -1,7 +1,5 @@
 # Lab 1 Part 2
 
-# TODO: Need to change error handling: can't just close listener on part a
-
 import threading
 import socket
 import sys
@@ -9,7 +7,7 @@ import struct
 import random
 
 # Constants
-DEBUG = True
+DEBUG = False
 
 MAX_PORT = 65535
 MIN_PORT = 1024

@@ -9,7 +9,7 @@ import struct
 import time
 
 # Constants
-DEBUG = True
+DEBUG = False
 
 MAX_TIMEOUTS = 10
 
@@ -277,10 +277,10 @@ def main(args):
     end_time = time.perf_counter()
     print("Part 1 Complete")
     print("Summary:")
-    print(f"  SecretA: {secretA}")
-    print(f"  SecretB: {secretB}")
-    print(f"  SecretC: {secretC}")
-    print(f"  SecretD: {secretD}")
+    print(f"A: {secretA}")
+    print(f"B: {secretB}")
+    print(f"C: {secretC}")
+    print(f"D: {secretD}")
     print()
 
     print(f"Time elapsed: {end_time - start_time:.4f}s")
